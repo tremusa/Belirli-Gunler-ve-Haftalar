@@ -1,0 +1,61 @@
+name: TremuEcoFlowWatch Android Build
+
+on:
+  push:
+    branches:
+      - build-tremu-ecoflowwatch-v0.1.0
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct source archive
+        shell: bash
+        run: |
+          cat tremu-build/ecoflow.part*.b64 | base64 -d > TremuEcoFlowWatch_v0.1.0_CP02_FINAL_SOURCE.zip
+          sha256sum TremuEcoFlowWatch_v0.1.0_CP02_FINAL_SOURCE.zip
+          test "$(sha256sum TremuEcoFlowWatch_v0.1.0_CP02_FINAL_SOURCE.zip | awk '{print $1}')" = "6347efd54c27fb7015cc062161ef2a3b31663fa00ec34ba8ef27615f40a84a22"
+          mkdir workspace
+          unzip -q TremuEcoFlowWatch_v0.1.0_CP02_FINAL_SOURCE.zip -d workspace
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 35
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Test and build debug APK
+        working-directory: workspace/TremuEcoFlowWatch
+        run: gradle --no-daemon test assembleDebug --stacktrace
+
+      - name: Package APK
+        shell: bash
+        run: |
+          cp workspace/TremuEcoFlowWatch/app/build/outputs/apk/debug/app-debug.apk TremuEcoFlowWatch_v0.1.0_debug.apk
+          sha256sum TremuEcoFlowWatch_v0.1.0_debug.apk > TremuEcoFlowWatch_v0.1.0_debug.apk.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TremuEcoFlowWatch-v0.1.0-debug
+          path: |
+            TremuEcoFlowWatch_v0.1.0_debug.apk
+            TremuEcoFlowWatch_v0.1.0_debug.apk.sha256
+          if-no-files-found: error
